@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jira Components 提取器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #667eea;
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 13px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .results-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .count-badge {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .copy-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .copy-btn:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+        }
+
+        .copy-btn:active {
+            transform: translateY(0);
+        }
+
+        .copy-btn.copied {
+            background: #8b5cf6;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #10b981;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            font-size: 14px;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .component-list {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .component-item {
+            background: white;
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            transition: all 0.2s ease;
+        }
+
+        .component-item:hover {
+            transform: translateX(4px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .component-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #c33;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .empty-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Jira Components 提取器</h1>
+        <p class="subtitle">上傳 Jira HTML 檔案，自動提取所有不重複的 Component/s 資料</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">點擊或拖曳檔案到這裡</div>
+            <div class="upload-hint">支援 .html 檔案</div>
+            <input type="file" id="fileInput" accept=".html,.htm">
+        </div>
+
+        <div class="results" id="results">
+            <div class="results-header">
+                <div class="results-title">提取結果</div>
+                <div class="header-actions">
+                    <div class="count-badge" id="countBadge">0 個</div>
+                    <button class="copy-btn" id="copyBtn">
+                        <span>📋</span>
+                        <span id="copyText">複製全部</span>
+                    </button>
+                </div>
+            </div>
+            <div class="component-list" id="componentList"></div>
+        </div>
+
+        <div id="errorMsg"></div>
+        <div class="toast" id="toast">✓ 已複製到剪貼簿</div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const results = document.getElementById('results');
+        const componentList = document.getElementById('componentList');
+        const countBadge = document.getElementById('countBadge');
+        const errorMsg = document.getElementById('errorMsg');
+        const copyBtn = document.getElementById('copyBtn');
+        const copyText = document.getElementById('copyText');
+        const toast = document.getElementById('toast');
+
+        let currentComponents = [];
+
+        // 點擊上傳區域
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // 檔案選擇
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+
+        // 拖曳功能
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) processFile(file);
+        });
+
+        // 複製按鈕
+        copyBtn.addEventListener('click', async () => {
+            if (currentComponents.length === 0) return;
+
+            try {
+                const text = currentComponents.join('\n');
+                await navigator.clipboard.writeText(text);
+                
+                // 顯示成功提示
+                copyBtn.classList.add('copied');
+                copyText.textContent = '已複製！';
+                showToast();
+
+                setTimeout(() => {
+                    copyBtn.classList.remove('copied');
+                    copyText.textContent = '複製全部';
+                }, 2000);
+            } catch (error) {
+                showError('複製失敗，請手動複製');
+            }
+        });
+
+        function processFile(file) {
+            if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
+                showError('請上傳 HTML 檔案');
+                return;
+            }
+
+            errorMsg.innerHTML = '';
+            componentList.innerHTML = '<div class="loading">處理中...</div>';
+            results.style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    const components = extractComponents(content);
+                    displayComponents(components);
+                } catch (error) {
+                    showError('處理檔案時發生錯誤: ' + error.message);
+                    results.style.display = 'none';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function extractComponents(htmlContent) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlContent, 'text/html');
+            
+            // 找到所有 class 為 "components" 的 td 元素
+            const componentCells = doc.querySelectorAll('td.components');
+            const componentsSet = new Set();
+
+            componentCells.forEach(cell => {
+                // 獲取單元格內的文字內容
+                const text = cell.textContent.trim();
+                
+                // 如果不是空白或只有 &nbsp;
+                if (text && text !== '' && text !== '\u00a0') {
+                    // 分割多個 components（用逗號分隔）
+                    const parts = text.split(',').map(s => s.trim()).filter(s => s);
+                    parts.forEach(part => componentsSet.add(part));
+                }
+            });
+
+            // 轉換為陣列並排序
+            return Array.from(componentsSet).sort();
+        }
+
+        function displayComponents(components) {
+            currentComponents = components;
+
+            if (components.length === 0) {
+                componentList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <div>未找到任何 Component/s 資料</div>
+                    </div>
+                `;
+                countBadge.textContent = '0 個';
+                copyBtn.style.display = 'none';
+                return;
+            }
+
+            componentList.innerHTML = components
+                .map(component => `<div class="component-item">${component}</div>`)
+                .join('');
+            
+            countBadge.textContent = `${components.length} 個`;
+            copyBtn.style.display = 'flex';
+        }
+
+        function showError(message) {
+            errorMsg.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        function showToast() {
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
